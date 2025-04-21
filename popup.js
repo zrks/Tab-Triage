@@ -41,7 +41,25 @@ document.addEventListener('click', (e) => {
       chrome.storage.local.get({ savedTabs: [] }, (data) => {
         const updated = [...data.savedTabs, tabId];
         chrome.storage.local.set({ savedTabs: updated });
-        alert('Tab saved!');
+        const popup = document.createElement('div');
+        popup.textContent = 'Tab saved!';
+        popup.style.position = 'fixed';
+        popup.style.bottom = '20px';
+        popup.style.right = '20px';
+        popup.style.padding = '10px 15px';
+        popup.style.backgroundColor = '#323232';
+        popup.style.color = 'white';
+        popup.style.borderRadius = '4px';
+        popup.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+        popup.style.opacity = '1';
+        popup.style.transition = 'opacity 0.5s ease';
+
+        document.body.appendChild(popup);
+
+        setTimeout(() => {
+          popup.style.opacity = '0';
+          setTimeout(() => popup.remove(), 500);
+        }, 1000);
       });
     }
   }
