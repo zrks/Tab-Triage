@@ -37,29 +37,6 @@
   <button id="save">Save Settings</button>
   <div class="status" id="status"></div>
 
-  <script>
-    // Load saved options
-    document.addEventListener('DOMContentLoaded', () => {
-      browser.storage.local.get(['closeDuplicateTabs', 'highlightUnreadTabs']).then((result) => {
-        document.getElementById('closeDuplicateTabs').checked = result.closeDuplicateTabs || false;
-        document.getElementById('highlightUnreadTabs').checked = result.highlightUnreadTabs || false;
-      });
-    });
-
-    // Save options
-    document.getElementById('save').addEventListener('click', () => {
-      const closeDuplicateTabs = document.getElementById('closeDuplicateTabs').checked;
-      const highlightUnreadTabs = document.getElementById('highlightUnreadTabs').checked;
-
-      browser.storage.local.set({
-        closeDuplicateTabs,
-        highlightUnreadTabs
-      }).then(() => {
-        const status = document.getElementById('status');
-        status.textContent = 'Settings saved!';
-        setTimeout(() => status.textContent = '', 1500);
-      });
-    });
-  </script>
+  <script src="options.js"></script>
 </body>
 </html>

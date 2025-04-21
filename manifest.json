@@ -18,6 +18,11 @@
   },
   "permissions": ["tabs", "storage"],
   "background": {
-    "scripts": ["background.js"]
-  }
+    "scripts": ["background.js"],
+    "persistent": false
+  },
+  "options_ui": {
+  "page": "options.html"
+}
+
 }
