@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tab Triage Settings</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+    }
+    input[type="checkbox"] {
+      margin-right: 8px;
+    }
+    .status {
+      margin-top: 10px;
+      color: green;
+    }
+  </style>
+</head>
+<body>
+  <h1>Tab Triage Settings</h1>
+
+  <label>
+    <input type="checkbox" id="closeDuplicateTabs" />
+    Automatically close duplicate tabs
+  </label>
+
+  <label>
+    <input type="checkbox" id="highlightUnreadTabs" />
+    Highlight unread tabs in tab list
+  </label>
+
+  <button id="save">Save Settings</button>
+  <div class="status" id="status"></div>
+
+  <script>
+    // Load saved options
+    document.addEventListener('DOMContentLoaded', () => {
+      browser.storage.local.get(['closeDuplicateTabs', 'highlightUnreadTabs']).then((result) => {
+        document.getElementById('closeDuplicateTabs').checked = result.closeDuplicateTabs || false;
+        document.getElementById('highlightUnreadTabs').checked = result.highlightUnreadTabs || false;
+      });
+    });
+
+    // Save options
+    document.getElementById('save').addEventListener('click', () => {
+      const closeDuplicateTabs = document.getElementById('closeDuplicateTabs').checked;
+      const highlightUnreadTabs = document.getElementById('highlightUnreadTabs').checked;
+
+      browser.storage.local.set({
+        closeDuplicateTabs,
+        highlightUnreadTabs
+      }).then(() => {
+        const status = document.getElementById('status');
+        status.textContent = 'Settings saved!';
+        setTimeout(() => status.textContent = '', 1500);
+      });
+    });
+  </script>
+</body>
+</html>

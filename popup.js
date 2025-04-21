@@ -29,12 +29,10 @@ document.addEventListener('click', (e) => {
     const tabId = parseInt(btn.dataset.id);
     if (action === 'close') chrome.tabs.remove(tabId);
     if (action === 'read') {
-      browser.tabs.update(tabId, { active: true }).then(() => {
-        return browser.tabs.get(tabId);
-      }).then((tab) => {
-        return browser.windows.update(tab.windowId, { focused: true });
-      }).catch((err) => {
-        console.error("Error activating tab:", err);
+      chrome.tabs.update(tabId, { active: true }, () => {
+        chrome.tabs.get(tabId, (tab) => {
+          chrome.windows.update(tab.windowId, { focused: true });
+        });
       });
     }
     if (action === 'save') {
