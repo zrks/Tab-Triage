@@ -1,144 +1,93 @@
-// For Chrome compatibility
-// const browser = typeof browser === 'undefined' ? chrome : browser;
-
-(async function initializeBackgroundScript() {
-
-  // --- State Tracking ---
+(async () => {
+  // --- Constants & State ---
   const pendingTabChecks = new Set();
-
-  // Get the settings page URL for comparison
   const optionsUrl = browser.runtime.getURL("options.html");
-
   let openingOptionsPage = false;
 
-  // --- Utility Functions ---
-
-  /**
-   * Shows a notification or triggers a quiz challenge when tab limit is reached.
-   * @param {number} tabId - The ID of the tab to notify about.
-   */
-  async function showLimitReachedNotification(tabId) {
-    try {
-
-      const activeTabs = await browser.tabs.query({ active: true, currentWindow: true });
-      if (activeTabs.length === 0) return;
-
-      const activeTab = activeTabs[0];
-
-      const api = typeof browser !== 'undefined' ? browser : chrome;
-
-      if (api.notifications && api.notifications.create) {
-        api.notifications.create({
-          type: 'basic',
-          iconUrl: 'icons/icon128.png',
-          title: 'Tab Limit Reached',
-          message: `You've reached the maximum of ${maxTabsPerWindow} tabs in this window.`,
-        });
-      } else {
-        console.warn('Notifications API is not available.');
-      }
-
-      console.log("browser.notifications =", browser.notifications);
-
-      try {
-        // Try content script approach for interactive challenge
-        await browser.tabs.sendMessage(activeTab.id, {
-          action: 'showLimitPopup',
-          maxTabs: maxTabsPerWindow,
-        });
-      } catch (err) {
-        console.warn('could not await browser.tabs.sendMessage(activeTab.id, {.');
-        console.warn('Error sending message to content script:', err);
-        // Fall back to basic notification if content script communication fails
-        browser.notifications.create({
-          type: 'basic',
-          title: 'Tab Limit Reached',
-          message: `You've reached the maximum of ${maxTabsPerWindow} tabs in this window.`,
-        });
-      }
-    } catch (err) {
-      console.error('Error showing tab limit notification:', err);
-    }
-  }
-
-  // --- Initialization ---
-
-  await browser.runtime.onInstalled.addListener(() => {
-    console.log('Tab Triage Extension installed.');
-  });
-
+  // Default value for maxTabsPerWindow
   let maxTabsPerWindow = await browser.storage.local
-    .get('maxTabsPerWindow')
+    .get("maxTabsPerWindow")
     .then((result) => {
       if (result.maxTabsPerWindow === undefined) {
-        console.log('maxTabsPerWindow not found, setting to 10');
+        console.log("[Init] maxTabsPerWindow not found, setting to 10");
         return 10;
       }
       return result.maxTabsPerWindow;
     })
     .catch((err) => {
-      console.error('Error retrieving maxTabsPerWindow from storage:', err);
+      console.error("[Init] Error retrieving maxTabsPerWindow from storage:", err);
       return 10;
     });
 
-  // Listen for storage changes to update maxTabsPerWindow
-  browser.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'local' && changes.maxTabsPerWindow) {
-      console.log(
-        `maxTabsPerWindow changed from ${maxTabsPerWindow} to ${changes.maxTabsPerWindow.newValue}`
-      );
-      maxTabsPerWindow = changes.maxTabsPerWindow.newValue;
+  // --- Utility Functions ---
+
+  const showLimitReachedNotification = async (tabId) => {
+    try {
+      const activeTabs = await browser.tabs.query({ active: true, currentWindow: true });
+      if (activeTabs.length === 0) return;
+
+      const activeTab = activeTabs[0];
+      const api = typeof browser !== "undefined" ? browser : chrome;
+
+      if (api.notifications && api.notifications.create) {
+        api.notifications.create({
+          type: "basic",
+          iconUrl: "icons/icon128.png",
+          title: "Tab Limit Reached",
+          message: `You've reached the maximum of ${maxTabsPerWindow} tabs in this window.`,
+        });
+      } else {
+        console.warn("[Notify] Notifications API is not available.");
+      }
+
+      console.log("[Notify] browser.notifications =", browser.notifications);
+
+      try {
+        await browser.tabs.sendMessage(activeTab.id, {
+          action: "showLimitPopup",
+          maxTabs: maxTabsPerWindow,
+        });
+      } catch (err) {
+        console.warn("[Notify] Error sending message to content script:", err);
+      }
+    } catch (err) {
+      console.error("[Notify] Error showing tab limit notification:", err);
     }
-  });
+  };
 
-  // --- Event Listeners ---
+  const isOptionsPage = (tab) => {
+    const url = tab.url || tab.pendingUrl || "";
+    return url.startsWith(optionsUrl);
+  };
 
-  /**
-   * Handles new tab creation; removes tab if limit exceeded.
-   */
-  async function handleTabCreated(tab) {
-    console.log('Tab created');
+  // --- Event Handlers ---
 
-    if (tab.windowId === undefined) {
-      return;
-    }
+  const handleTabCreated = async (tab) => {
+    console.log("[Tab] Created");
+
+    if (tab.windowId === undefined) return;
 
     try {
       const tabsInWindow = await browser.tabs.query({ windowId: tab.windowId });
 
       if (tabsInWindow.length > maxTabsPerWindow) {
-        console.log(`Maximum tabs (${maxTabsPerWindow}) reached, removing new tab.`);
+        console.log(`[Tab] Limit reached (${maxTabsPerWindow}), removing tab.`);
         await browser.tabs.remove(tab.id);
         await showLimitReachedNotification(tab.id);
       } else {
-        // Track tabs for URL validation on update
         pendingTabChecks.add(tab.id);
       }
     } catch (err) {
-      console.error('Error handling tab creation:', err);
+      console.error("[Tab] Error handling tab creation:", err);
     }
-  }
+  };
 
-  /**
- * Check if a tab is loading the options page
- * @param {object} tab - Tab object to check
- * @returns {boolean} True if the tab is the options page
- */
-  function isOptionsPage(tab) {
-    const url = tab.url || tab.pendingUrl || "";
-    return url.startsWith(optionsUrl);
-  }
-
-  /**
-   * Handles tab updates; removes tab if limit exceeded after URL change.
-   */
-  function handleTabUpdated(tabId, changeInfo, tab) {
-    // Only inject if the tab has a valid HTTP(S) URL
+  const handleTabUpdated = (tabId, changeInfo, tab) => {
     if (tab.url && tab.url.startsWith("http")) {
       try {
         browser.tabs.executeScript(tabId, { file: "content.js" });
       } catch (err) {
-        console.warn("Could not inject content script:", err.message);
+        console.warn("[Update] Could not inject content script:", err.message);
       }
     }
 
@@ -152,17 +101,29 @@
             if (tabs.length > maxTabsPerWindow) {
               browser.tabs.remove(tabId);
               showLimitReachedNotification(tabId);
-              console.log(`Tab removed: ${tabId}`);
+              console.log(`[Update] Tab removed: ${tabId}`);
             }
           })
-          .catch((error) => {
-            console.error('Error checking updated tab:', error);
+          .catch((err) => {
+            console.error("[Update] Error checking updated tab:", err);
           });
       }
     }
-  }
+  };
+
+  // --- Event Listeners ---
 
   browser.tabs.onCreated.addListener(handleTabCreated);
   browser.tabs.onUpdated.addListener(handleTabUpdated);
 
+  browser.runtime.onInstalled.addListener(() => {
+    console.log("[Init] Tab Triage Extension installed.");
+  });
+
+  browser.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === "local" && changes.maxTabsPerWindow) {
+      console.log(`[Storage] maxTabsPerWindow changed from ${maxTabsPerWindow} to ${changes.maxTabsPerWindow.newValue}`);
+      maxTabsPerWindow = changes.maxTabsPerWindow.newValue;
+    }
+  });
 })();
