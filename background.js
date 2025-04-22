@@ -6,6 +6,11 @@
   // --- State Tracking ---
   const pendingTabChecks = new Set();
 
+  // Get the settings page URL for comparison
+  const optionsUrl = browser.runtime.getURL("options.html");
+
+  let openingOptionsPage = false;
+
   // --- Utility Functions ---
 
   /**
@@ -14,18 +19,36 @@
    */
   async function showLimitReachedNotification(tabId) {
     try {
+
       const activeTabs = await browser.tabs.query({ active: true, currentWindow: true });
       if (activeTabs.length === 0) return;
 
       const activeTab = activeTabs[0];
 
+      const api = typeof browser !== 'undefined' ? browser : chrome;
+
+      if (api.notifications && api.notifications.create) {
+        api.notifications.create({
+          type: 'basic',
+          iconUrl: 'icons/icon128.png',
+          title: 'Tab Limit Reached',
+          message: `You've reached the maximum of ${maxTabsPerWindow} tabs in this window.`,
+        });
+      } else {
+        console.warn('Notifications API is not available.');
+      }
+
+      console.log("browser.notifications =", browser.notifications);
+
       try {
         // Try content script approach for interactive challenge
         await browser.tabs.sendMessage(activeTab.id, {
-          action: 'triggerQuizChallenge',
+          action: 'showLimitPopup',
           maxTabs: maxTabsPerWindow,
         });
       } catch (err) {
+        console.warn('could not await browser.tabs.sendMessage(activeTab.id, {.');
+        console.warn('Error sending message to content script:', err);
         // Fall back to basic notification if content script communication fails
         browser.notifications.create({
           type: 'basic',
@@ -97,13 +120,31 @@
   }
 
   /**
+ * Check if a tab is loading the options page
+ * @param {object} tab - Tab object to check
+ * @returns {boolean} True if the tab is the options page
+ */
+  function isOptionsPage(tab) {
+    const url = tab.url || tab.pendingUrl || "";
+    return url.startsWith(optionsUrl);
+  }
+
+  /**
    * Handles tab updates; removes tab if limit exceeded after URL change.
    */
   function handleTabUpdated(tabId, changeInfo, tab) {
+    // Only inject if the tab has a valid HTTP(S) URL
+    if (tab.url && tab.url.startsWith("http")) {
+      try {
+        browser.tabs.executeScript(tabId, { file: "content.js" });
+      } catch (err) {
+        console.warn("Could not inject content script:", err.message);
+      }
+    }
+
     if (pendingTabChecks.has(tabId) && changeInfo.url) {
       pendingTabChecks.delete(tabId);
 
-      // Assuming isOptionsPage and openingOptionsPage are defined elsewhere
       if (!isOptionsPage(tab) && !openingOptionsPage) {
         browser.tabs
           .query({ windowId: tab.windowId })
@@ -111,6 +152,7 @@
             if (tabs.length > maxTabsPerWindow) {
               browser.tabs.remove(tabId);
               showLimitReachedNotification(tabId);
+              console.log(`Tab removed: ${tabId}`);
             }
           })
           .catch((error) => {
